@@ -1,0 +1,38 @@
+---
+#
+#
+#
+
+- name: Replacing specific lines in {{ all_yml_path }}
+  lineinfile:
+    path: "{{ all_yml_path }}"
+    regexp: "{{ item['find'] }}"
+    line: "{{ item['replace'] }}"
+  with_items:
+    - find: "^#?openshift_openstack_num_nodes.*"
+      replace: "openshift_openstack_num_nodes: {{ block['end']|int + 1 }}"
+
+- block:
+    - name: Update motd on failure
+      include_role:
+        name: update-motd
+      vars:
+        update_motd: "Scaling up cluster to {{ block['end']|int + 1 }}"
+
+    - name: Scaling up the OpenShift resources
+      shell: >
+        {{ ansible_playbook }} -vv
+        --user openshift
+        -i inventory/
+        -i /home/cloud-user/openshift-ansible/playbooks/openstack/scaleup_inventory.py
+        /home/cloud-user/openshift-ansible/playbooks/openstack/openshift-cluster/node-scaleup.yml 2>&1 >> /home/cloud-user/scale-ci/log/scaleup_openshift_{{ block['end']|int + 1 }}.log
+      args:
+        # Use bash to get the posix style redirects.
+        executable: /bin/bash
+  always:
+    - name: Copy the log file to the artifacts directory
+      synchronize:
+        src: /home/cloud-user/scale-ci/log
+        dest: "{{ artifacts_dir }}"
+        mode: pull
+        use_ssh_args: yes

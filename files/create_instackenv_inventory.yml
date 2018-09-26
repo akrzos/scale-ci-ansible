@@ -1,6 +1,7 @@
 ---
 - name: Tasks to download and create an inventory of physical servers
-  hosts: openstack-server
+  hosts: undercloud
+  remote_user: stack
   vars:
     # The cloud is the identifier for the allocation.
     cloud: "{{ lookup('env', 'CLOUD_TITLE') | default('cloud03', true) }}"

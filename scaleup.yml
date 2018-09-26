@@ -1,20 +1,46 @@
 ---
-- name: Find the target-server and add it to the in-memory inventory
-  hosts: openstack-server
+- name: Get bastion machine
+  hosts: undercloud
+  remote_user: stack
   vars_files:
     - vars/scaleup.yml
-  pre_tasks:
+  tasks:
     - name: Ensure the local artifacts directory exists
       file:
-        path: "{{ artifacts_directory }}"
+        path: "{{ artifacts_dir }}"
         state: directory
       delegate_to: localhost
-  roles:
-    - openstack_get_server
 
-- name: Create additional OpenStack VMs and add them to OpenShift
-  hosts: target-server
+    - name: Get bastion FIP
+      shell: |
+        . /home/stack/overcloudrc
+        openstack server show {{osp_bastion_name}} --format value -c addresses | awk '{print $2}'
+      register: ansible_host_fip
+      changed_when: false
+
+    - name: Add bastion to the inventory
+      add_host:
+        name: "{{ansible_host_fip.stdout}}"
+        groups: ["bastion"]
+        ansible_user: cloud-user
+        ansible_ssh_common_args: |-
+          -o ProxyCommand='ssh -i {{ansible_private_key_file}} -W %h:%p stack@{{inventory_hostname}}'
+      changed_when: false
+  roles:
+    - name: update-motd
+      vars:
+        update_motd: Cluster starting scaleup
+
+- name: Scaleup OCP on OSP
+  hosts: bastion
   vars_files:
     - vars/scaleup.yml
   roles:
-    - openshift_on_openstack_scale
+    - name: update-motd
+      vars:
+        update_motd: Cluster starting scaleup
+    - ocp_on_osp_scale
+
+    - name: update-motd
+      vars:
+        update_motd: "Cluster Completed Scaleup to {{openshift_node_target}}"

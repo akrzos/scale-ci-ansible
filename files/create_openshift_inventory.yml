@@ -1,6 +1,7 @@
 ---
 - name: Tasks to create an inventory of OpenShift VMs running on OpenStack
-  hosts: openstack-server
+  hosts: undercloud
+  remote_user: stack
   vars:
     # The name of users for the VMs that are not part of OpenShift.
     cloud_user: "{{ lookup('env', 'CLOUD_USER') | default('cloud-user', true) }}"

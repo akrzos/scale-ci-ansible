@@ -1,0 +1,6 @@
+[undercloud]
+# Put your underclouds fully qualified domain name here
+# Ex: undercloud.example.com ansible_ssh_pass=the_password
+
+[image-server]
+# The server that contains the OpenShift images

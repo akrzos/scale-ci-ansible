@@ -1,0 +1,50 @@
+---
+#
+# Tasks to upload image into Overcloud
+#
+
+- name: Searching for qcow2 image files in {{ install_directory }}
+  find:
+    paths: "{{ install_directory }}"
+    patterns: "([0-9]+-[0-9]+-[0-9]+)-ocp-({{ ocp_major_minor }}.+)-.+[.]qcow2$"
+    use_regex: yes
+    recurse: true
+  register: qcow2_images
+
+- name: Converting qcow2 images to raw format
+  shell: "qemu-img convert -f qcow2 -O raw {{ item['path'] }} {{ (item['path']|splitext)[0] }}.raw"
+  with_items: "{{ qcow2_images['files'] }}"
+
+- name: Searching for raw image files in {{ install_directory }}
+  find:
+    paths: "{{ install_directory }}"
+    patterns: "([0-9]+-[0-9]+-[0-9]+)-ocp-({{ ocp_major_minor }}.+)-.+raw$"
+    use_regex: yes
+    recurse: true
+  register: images
+
+- name: Deleting the existing images in OpenStack
+  shell: |
+    . /home/stack/overcloudrc
+    openstack image delete ocp-{{ ocp_major_minor }}-{{ item }}
+  with_items: "{{ [ 'atomic', 'rhel' ] }}"
+  # Do not fail if here is no image to delete.
+  ignore_errors: true
+
+- name: Uploading the images to OpenStack
+  shell: |
+    . /home/stack/overcloudrc
+    openstack image create --disk-format raw --container-format bare --file {{ item['path'] }} ocp-{{ ocp_major_minor }}-{{ ('atomic' in item['path'])|ternary('atomic','rhel') }} --format value -c id
+  with_items: "{{ images['files'] }}"
+  register: create_result
+  # Wait for a successful return code.
+  until: create_result['rc'] == 0
+  # Retry up to 3 times.
+  retries: 3
+  delay: 5
+
+- name: Adding metadata about the image
+  shell: |
+    . /home/stack/overcloudrc
+    openstack image set --property file_name={{ item['path']|basename }} --property directory={{ item['path']|dirname }} ocp-{{ ocp_major_minor }}-{{ ('atomic' in item['path'])|ternary('atomic','rhel') }}
+  with_items: "{{ images['files'] }}"

@@ -1,0 +1,29 @@
+---
+# TODO: Use the ansible parted module when it can figure out the defaults by its own.
+#- name: Partition the device
+#  parted:
+#    device: /dev/vda
+#    number: "{{ pbench_storage_device_partition }}"
+#    state: present
+#  become: true
+
+- name: Adding primary partition 3 to /dev/vda
+  shell: echo -e 'n\np\n3\n\n\nw\n' | fdisk /dev/vda
+  become: yes
+  ignore_errors: yes
+
+- name: partprobe
+  command: partprobe /dev/vda
+  become: yes
+
+- name: Creating an xfs filesystem on /dev/vda3
+  command: mkfs.xfs -f /dev/vda3
+  become: yes
+
+- name: Creating an entry in fstab and mounting /dev/vda3
+  mount:
+    path: /var/lib/pbench-agent
+    src: /dev/vda3
+    fstype: xfs
+    state: mounted
+  become: yes

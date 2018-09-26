@@ -1,0 +1,106 @@
+---
+#
+# Install/Setup OCP DNS
+#
+
+- name: Cloning the openshift-ansible-contrib repository
+  git:
+    dest: /home/cloud-user/openshift-ansible-contrib
+    repo: "{{ openshift_ansible_contrib_repo }}"
+    version: "{{ openshift_ansible_contrib_version }}"
+
+- name: Generating the DNS update key
+  command: /usr/sbin/rndc-confgen -a -A hmac-md5 -c /home/cloud-user/scale-ci/dns_update.key -k update-key -r /dev/urandom
+
+- name: Reading the remote dns key file
+  shell: grep secret /home/cloud-user/scale-ci/dns_update.key | awk '{print $2}' | sed 's/"//g;s/;//'
+  register: dns_key_secret
+  changed_when: false
+
+- name: Setting the DNS vars
+  template:
+    src: dns_vars.yml.j2
+    dest: /home/cloud-user/scale-ci/dns_vars.yml
+
+- block:
+    - name: Creating the DNS server
+      shell: |
+        . /home/cloud-user/overcloudrc
+        ansible-playbook -vvv --key-file /home/cloud-user/.ssh/id_rsa -e @/home/cloud-user/scale-ci/dns_vars.yml /home/cloud-user/openshift-ansible-contrib/reference-architecture/osp-dns/deploy-dns.yaml 2>&1 > /home/cloud-user/scale-ci/log/dns_install.log
+  always:
+    - name: Copy the log file to the artifacts directory
+      synchronize:
+        src: /home/cloud-user/scale-ci/log/
+        dest: "{{artifacts_dir}}"
+        mode: pull
+        use_ssh_args: yes
+
+- name: Get DNS ns-master FIP
+  shell: |
+    . /home/cloud-user/overcloudrc
+    openstack server show ns-master.{{ clusterid }}.{{ dns_domain }} --format value -c addresses | awk '{print $2}'
+  register: dns_fip
+  changed_when: false
+
+- name: Replace the address of the DNS server for the subnet
+  shell: |
+    . /home/cloud-user/overcloudrc
+    openstack subnet set --no-dns-nameservers --dns-nameserver {{ dns_fip.stdout }} ci_subnet
+
+- name: Setting the DNS private update information
+  set_fact:
+    dns_private_info:
+      key_algorithm: hmac-md5
+      key_name: update-key
+      key_secret: "{{ dns_key_secret.stdout }}"
+      server: "{{ dns_fip.stdout }}"
+
+- name: Setting the OpenShift name server update keys
+  set_fact:
+    nsupdate_keys:
+      openshift_openstack_external_nsupdate_keys:
+        private: "{{ dns_private_info }}"
+
+- name: Writing the OpenShift name server update keys to a file
+  copy:
+    content: "{{ nsupdate_keys|to_nice_yaml }}"
+    dest: /home/cloud-user/scale-ci/nsupdate_keys.yml
+
+- name: Adding bastion machine to DNS
+  nsupdate:
+    key_name: update-key
+    key_secret: "{{ dns_key_secret.stdout }}"
+    key_algorithm: hmac-md5
+    server: "{{ dns_fip.stdout }}"
+    zone: "{{ clusterid }}.{{ dns_domain }}"
+    record: "{{ osp_bastion_name }}"
+    type: "A"
+    value: "{{ item }}"
+    state: present
+  with_items: "{{ groups['bastion'] }}"
+  register: nsupdate_add_result
+  until: nsupdate_add_result is succeeded
+  retries: 10
+
+- name: Change NetworkManager configuration to not update DNS
+  lineinfile:
+    backup: yes
+    dest: /etc/NetworkManager/NetworkManager.conf
+    line: "dns=no"
+    insertafter: "\\[main\\]"
+  become: true
+
+- name: Add the cluster DNS the resolv.conf
+  lineinfile:
+    backup: yes
+    dest: /etc/resolv.conf
+    line: "nameserver {{ dns_fip.stdout }}"
+    insertbefore: "^nameserver.*"
+  become: true
+
+- name: Replace the search string with the cluster zone in resolv.conf
+  lineinfile:
+    dest: /etc/resolv.conf
+    line: "search cluster.local {{ clusterid }}.{{ dns_domain }} openstacklocal"
+    regexp: "^search.*"
+  become: true

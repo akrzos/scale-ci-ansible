@@ -1,8 +1,0 @@
----
-- name: Applying patches to files in {{ ansible_user_dir }} directory
-  patch:
-    src: "{{ item }}"
-    basedir: "{{ ansible_user_dir }}"
-    strip: 0
-  with_items:
-    - "{{ lookup('fileglob', '*.patch').split(',') | sort }}"

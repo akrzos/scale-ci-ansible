@@ -1,0 +1,16 @@
+---
+#
+# Tasks to copy master-0 kube config
+#
+
+- name: Creating /home/cloud-user/.kube directory
+  file:
+    path: /home/cloud-user/.kube
+    state: directory
+
+- name: Copying the kubeconfig file from the master to the target host
+  command: "scp openshift@{{ hostvars[groups.masters[0]].public_ip }}:.kube/config /home/cloud-user/.kube/config"
+
+- name: Copying {{ ansible_user_dir }}/.kube to /root
+  command: "cp -a /home/cloud-user/.kube /root"
+  become: true

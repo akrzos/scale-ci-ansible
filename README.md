@@ -10,20 +10,10 @@ repository.
 The repository contains several Ansible playbooks and roles for installing
 OpenShift on OpenStack. To use Ansible you must first create an inventory file:  
 
-1. Create an `inventory` file to suit your environment. The following groups
-must be defined in the inventory file:  
-* **openstack-server** - The group contains the host that runs OpenStack. Sometimes
-called the undercloud and usually contains the the OpenStack rc file.
-* **image-server** - This group contains the host that has the RAW images to use
-when building virtual machine servers in OpenStack.
-
-There is a shell script file that formats the values for an Ansible inventory
-file. The script uses the the following environment variables:  
-`OPENSTACK_SERVER`, `OPENSTACK_USER`, `IMAGE_SERVER`, and `IMAGE_SERVER_USER`
-
-```sh
-files/create_inventory.sh
-```
+1. Create an `inventory` file based on `inventory.example` to suit your environment. The following
+groups must be defined in the inventory file:
+* **undercloud** - The group contains the tripleo undercloud.
+* **image-server** - This group contains the host that hosts OCP images.
 
 2. Set environment variables for the runtime environment (such as Jenkins). See
 the [environment variables](#environment_variables) section for more details.
@@ -61,9 +51,7 @@ PRIVATE_KEY
 # OpenShift Container Platform (OCP) variables.
 ###############################################################################
 OCP_REQUIRED_ANSIBLE_VERSION
-OCP_CLEAN_YUM_CACHE
 
-OCP_ARTIFACTS_DIR
 OCP_CLUSTER_ID
 OCP_MAJOR_MINOR
 OCP_NTP_SERVERS
@@ -119,19 +107,6 @@ OSP_CLIENT_PATH
 OSP_ATOMIC_IMAGE
 OSP_RHEL_IMAGE
 
-OS_PROJECT_NAME
-
-OSP_KEYPAIR_NAME
-OSP_SECURITY_GROUP_NAME
-
-OSP_PUBLIC_NETWORK_NAME
-OSP_PUBLIC_SUBNET_NAME
-
-OSP_PRIVATE_NETWORK_NAME
-OSP_PRIVATE_ROUTER_NAME
-OSP_PRIVATE_SUBNET_NAME
-OSP_PRIVATE_SUBNET_RANGE
-
 OSP_SERVER_NAME
 OSP_SERVER_FLAVOR
 OSP_SERVER_IMAGE
@@ -152,7 +127,6 @@ PRIVATE_KEY
 ###############################################################################
 # OpenShift Container Platform (OCP) variables.
 ###############################################################################
-OCP_ARTIFACTS_DIR
 OCP_CLUSTER_ID
 OCP_MAJOR_MINOR
 OCP_NTP_SERVERS

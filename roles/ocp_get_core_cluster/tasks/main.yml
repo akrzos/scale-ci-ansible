@@ -1,0 +1,41 @@
+---
+#
+# Tasks to get Core Cluster into Ansible inventory
+#
+
+- name: Getting the list of hosts from OpenStack
+  shell: |
+    . /home/stack/overcloudrc
+    openstack server list --name .*-[0-9]*.{{ clusterid }}.{{ dns_domain }} --format value -c Name -c Networks --limit -1
+  register: networks
+  changed_when: false
+
+- name: Creating a list of hosts from the OpenStack networks output
+  set_fact:
+    ocp_core_cluster: "{{ ocp_core_cluster }} + [{ 'group': '{{ item.0.group }}', 'name': '{{ item.1.split(' ')[0].split('.')[0] }}', 'private_ip': '{{ item.1.split('=')[1].split(', ')[0] }}', 'public_ip': '{{ item.1.split(', ')[1] }}' }]"
+  with_subelements:
+    - - group: masters
+        nodes: "{{ networks.stdout_lines | select('match','^master') | list }}"
+      - group: infras
+        nodes: "{{ networks.stdout_lines | select('match','^infra') | list }}"
+      - group: lb
+        nodes: "{{ networks.stdout_lines | select('match','^lb') | list }}"
+      - group: cns
+        nodes: "{{ networks.stdout_lines | select('match','^cns') | list }}"
+      - group: app_nodes
+        nodes: "{{ networks.stdout_lines | select('match','^app-node-[0-1][.]') | list }}"
+    - nodes
+  changed_when: false
+
+- name: Adding the core OCP cluster to the in-memory inventory
+  add_host:
+    name: "{{ item.name }}"
+    groups: [ "{{ item.group }}" ]
+    ansible_user: openshift
+    ansible_host: "{{ item.public_ip }}"
+    ansible_ssh_common_args: |-
+      -o ProxyCommand='ssh -i {{ansible_private_key_file}} -W %h:%p stack@{{inventory_hostname}}'
+    public_ip: "{{ item.public_ip }}"
+    private_ip: "{{ item.private_ip }}"
+  with_items: "{{ ocp_core_cluster }}"
+  changed_when: false
